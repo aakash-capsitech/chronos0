@@ -1,39 +1,35 @@
 #include <iostream>
-#include <vector>
-#include "socket.h"
-#include "protocol.h"
+#include <chrono>
+#include <thread>
+#include "simulation.h"
 
 int main() {
-    UDPSocket serverSocket;
-    // serverSocket.Bind(8888);
+    PlayerState serverState { 320.0f, 240.0f, 150.0f };
+    InputS dummyInput { false, false, false, false };
 
-    if (!serverSocket.Bind(8888)) {
-        std::cerr << "Failed to bind to port 8888" << std::endl;
-        return 1;
-    }
-    serverSocket.SetNonBlocking();
+    auto lastTime = std::chrono::high_resolution_clock::now();
+    double accumulator = 0.0;
 
-    std::cout << "Chronos Server Phase 0: Listening on 8888..." << std::endl;
-
-    char buffer[1024];
-    sockaddr_in clientAddr;
+    std::cout << "Server Simulation Running..." << std::endl;
 
     while (true) {
-        int bytesRead = serverSocket.ReceiveFrom(buffer, sizeof(buffer), clientAddr);
-        if (bytesRead >= (int)sizeof(PacketHeader)) {
-            PacketHeader* header = (PacketHeader*)buffer;
-            if (header->magic == CHRONOS_MAGIC) {
-                std::cout << "Valid Packet Received! Type: " << (int)header->type << std::endl;
-            }
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        double frameTime = std::chrono::duration<double, std::milli>(currentTime - lastTime).count();
+        lastTime = currentTime;
+
+        accumulator += frameTime;
+
+        while (accumulator >= MS_PER_TICK) {
+            UpdateSimulation(serverState, dummyInput);
+            accumulator -= MS_PER_TICK;
         }
-        // Prevent 100% CPU usage
-        // SDL_Delay(1);
-        // Small sleep to keep CPU usage low
-        #ifdef _WIN32
-            Sleep(10);
-        #else
-            usleep(10000);
-        #endif
+
+        static int tickCounter = 0;
+        if (++tickCounter % 60 == 0) {
+            std::cout << "Tick: " << tickCounter << " | Player X: " << serverState.x << std::endl;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     return 0;
 }
