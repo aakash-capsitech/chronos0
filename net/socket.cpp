@@ -1,4 +1,5 @@
 #include "socket.h"
+#include <cstdlib> // for rand()
 #include <iostream>
 
 #ifdef _WIN32
@@ -45,7 +46,24 @@ bool UDPSocket::SetNonBlocking() {
     #endif
 }
 
-int UDPSocket::SendTo(const void* data,int size, sockaddr_in& address) {
+// int UDPSocket::SendTo(const void* data,int size, sockaddr_in& address) {
+//     return sendto(handle, (const char*)data, size, 0, (sockaddr*)&address, sizeof(sockaddr_in));
+// }
+
+// Set this to 0.1 for 10% loss, 0.5 for 50% loss
+const float ARTIFICIAL_LOSS_CHANCE = 0.1f; 
+
+int UDPSocket::SendTo(const void* data, int size, sockaddr_in& address) {
+    // Check if we should "drop" this packet
+    float randomRoll = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+    
+    if (randomRoll < ARTIFICIAL_LOSS_CHANCE) {
+        // We return the size to trick the caller into thinking it sent,
+        // but we never actually call the OS 'sendto' function.
+        // std::cout << "[Simulator] Packet Dropped!" << std::endl;
+        return size; 
+    }
+
     return sendto(handle, (const char*)data, size, 0, (sockaddr*)&address, sizeof(sockaddr_in));
 }
 

@@ -12,7 +12,39 @@ int main() {
 
     std::cout << "Server Simulation Running..." << std::endl;
 
+    uint32_t lastProcessedTick = 0;
+
     while (true) {
+
+        char buffer[1024];
+        sockaddr_in clientAddr;
+        
+        // 1. Receive Input
+        int bytes = serverSocket.ReceiveFrom(buffer, sizeof(buffer), clientAddr);
+        if (bytes >= sizeof(InputPacket)) {
+            InputPacket* pkt = (InputPacket*)buffer;
+
+            // Only process if it's a newer tick (Ignore late/duplicate packets)
+            if (pkt->tickNumber > lastProcessedTick) {
+                
+                // Translate mask back to simulation input
+                InputS simInput;
+                simInput.up    = pkt->inputMask & InputBit::W;
+                simInput.left  = pkt->inputMask & InputBit::A;
+                simInput.down  = pkt->inputMask & InputBit::S;
+                simInput.right = pkt->inputMask & InputBit::D;
+
+                // Authoritative Update
+                UpdateSimulation(serverState, simInput);
+                lastProcessedTick = pkt->tickNumber;
+
+                // 2. Send ACK back to Client
+                AckPacket ack;
+                ack.lastProcessedTick = lastProcessedTick;
+                serverSocket.SendTo(&ack, sizeof(ack), clientAddr);
+            }
+        }
+
         auto currentTime = std::chrono::high_resolution_clock::now();
         double frameTime = std::chrono::duration<double, std::milli>(currentTime - lastTime).count();
         lastTime = currentTime;

@@ -18,6 +18,8 @@ int main(int argc, char* argv[]) {
     const float FIXED_DT_MS = 16.66f;
 
     bool running = true;
+
+    uint32_t clientTick = 0;
     while (running) {
 
         SDL_Event event;
@@ -37,9 +39,44 @@ int main(int argc, char* argv[]) {
         
         accumulator += frameTime;
 
+        uint8_t mask = 0;
+        if (keystate[SDL_SCANCODE_W]) mask |= InputBit::W;
+        if (keystate[SDL_SCANCODE_A]) mask |= InputBit::A;
+        if (keystate[SDL_SCANCODE_S]) mask |= InputBit::S;
+        if (keystate[SDL_SCANCODE_D]) mask |= InputBit::D;
+
+        // while (accumulator >= FIXED_DT_MS) {
+        //     UpdateSimulation(myState, myInput, FIXED_DT);
+        //     accumulator -= FIXED_DT_MS;
+        // }
+
         while (accumulator >= FIXED_DT_MS) {
-            UpdateSimulation(myState, myInput, FIXED_DT);
+            // Prepare the packet
+            InputPacket pkt;
+            pkt.tickNumber = clientTick;
+            pkt.inputMask = mask;
+
+            // Send to Server
+            clientSocket.SendTo(&pkt, sizeof(pkt), serverAddr);
+
+            // Update local "predicted" state (Phase 3 preview)
+            InputS simInput = { (bool)(mask & InputBit::W), (bool)(mask & InputBit::S), 
+                                (bool)(mask & InputBit::A), (bool)(mask & InputBit::D) };
+            UpdateSimulation(myState, simInput);
+
+            clientTick++;
             accumulator -= FIXED_DT_MS;
+        }
+
+        // 2. Listen for ACKs from Server
+        char buffer[1024];
+        sockaddr_in fromAddr;
+        if (clientSocket.ReceiveFrom(buffer, sizeof(buffer), fromAddr) > 0) {
+            PacketHeader* header = (PacketHeader*)buffer;
+            if (header->type == (uint8_t)PacketType::SERVER_ACK) {
+                AckPacket* ack = (AckPacket*)buffer;
+                // std::cout << "Server confirmed tick: " << ack->lastProcessedTick << std::endl;
+            }
         }
 
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
